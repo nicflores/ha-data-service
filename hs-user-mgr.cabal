@@ -1,0 +1,25 @@
+cabal-version:      3.8
+name:               hs-data-service
+version:            0.1.0.0
+license:            NONE
+author:             Nic Flores
+maintainer:         flores314@gmail.com
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+common warnings
+    ghc-options: -Wall
+executable hs-user-mgr
+    import:           warnings
+    main-is:          Main.hs
+    build-depends:    base ^>=4.18.3.0
+        , scotty
+        , text
+        , amazonka
+        , amazonka-s3
+        , amazonka-sts
+        , lens
+        , http-conduit
+        , bytestring
+        , time
+    hs-source-dirs:   app
+    default-language: Haskell2010
