@@ -50,6 +50,17 @@ getData = get "/download" $ do
     Left err -> json $ Error (show err)
     Right _ -> json $ Success 200
 
+-- TODO
+-- pass in the ticket as an agrument
+-- check if the ticker exists before making a request for the data
+-- return proper https resonse errors
+--   a. if ticker is wrong
+--   b. if we get an error back from yahoo finance
+--   c. if we get an error from AWS
+-- Get hardcoded values from ENV Vars (write code for a Config)
+-- Error handling of config (ie. if env vars are wrong or don't exist)
+-- Write terraform to deploy to AWS
+
 -- Downloader Helper
 copyUrltoS3 :: IO (Either String ())
 copyUrltoS3 = do

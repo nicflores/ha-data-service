@@ -7,8 +7,8 @@ maintainer:         flores314@gmail.com
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 common warnings
-    ghc-options: -Wall
-executable hs-user-mgr
+    ghc-options: -Wall -O2
+executable hs-user-service
     import:           warnings
     main-is:          Main.hs
     build-depends:    base ^>=4.18.3.0
