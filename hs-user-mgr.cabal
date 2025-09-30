@@ -19,7 +19,9 @@ executable hs-user-service
         , amazonka-sts
         , lens
         , http-conduit
+        , http-types
         , bytestring
         , time
+        , aeson
     hs-source-dirs:   app
     default-language: Haskell2010
