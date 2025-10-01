@@ -6,15 +6,17 @@ module Main where
 
 import Amazonka (discover, newEnv, runResourceT, send, toBody)
 import Amazonka.Data (ToJSON)
-import Amazonka.S3 (ObjectKey (ObjectKey), newPutObject)
+import Amazonka.S3 (BucketName (BucketName), ObjectKey (ObjectKey), newPutObject)
 import Amazonka.STS (newGetCallerIdentity)
 import Amazonka.STS.GetCallerIdentity (getCallerIdentityResponse_account, getCallerIdentityResponse_arn, getCallerIdentityResponse_userId)
+import Config (AppConfig (..), loadConfig, s3Bucket, s3Prefix, serverPort, yahooFinanceBaseUrl, yahooFinanceLookupUrl)
 import Control.Exception (SomeException, try)
 import Control.Lens ((^.))
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (Value (Object), object, (.:), (.=))
 import Data.Aeson.Types (parseMaybe)
-import Data.Text (Text, pack, unpack)
+import Data.ByteString.Char8 as BS
+import Data.Text as T (Text, pack, unpack)
 import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
 import GHC.Generics (Generic)
 import Network.HTTP.Simple (HttpException, JSONException, getResponseBody, getResponseStatusCode, httpJSONEither, httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
@@ -22,9 +24,12 @@ import Network.HTTP.Types (Status, status404, status500, status502)
 import Web.Scotty (ScottyM, get, json, pathParam, scotty)
 
 main :: IO ()
-main = scotty 8080 $ do
-  healthEndpoint
-  getData
+main = do
+  config <- loadConfig
+  let port = serverPort config
+  scotty port $ do
+    healthEndpoint
+    getData config
 
 -- Handlers
 healthEndpoint :: ScottyM ()
@@ -32,10 +37,10 @@ healthEndpoint =
   get "/health" $ do
     json $ object ["status" .= ("healthy" :: Text)]
 
-getData :: ScottyM ()
-getData = get "/download/:ticker" $ do
+getData :: AppConfig -> ScottyM ()
+getData config = get "/download/:ticker" $ do
   ticker <- pathParam "ticker"
-  result <- liftIO $ copyUrltoS3 ticker
+  result <- liftIO $ copyUrltoS3 ticker config
   case result of
     Left err -> json $ Error (show err)
     Right _ -> json $ Success 200
@@ -48,16 +53,17 @@ data ApiResponse
 instance ToJSON ApiResponse
 
 -- Downloader Helper
-copyUrltoS3 :: Ticker -> IO (Either CopyToS3Error ())
-copyUrltoS3 ticker = do
-  tickerCheck <- tickerLookup ticker
+-- rewrite using eitherT
+copyUrltoS3 :: Ticker -> AppConfig -> IO (Either CopyToS3Error ())
+copyUrltoS3 ticker config = do
+  tickerCheck <- tickerLookup ticker config
   case tickerCheck of
     Left lookupErr -> return $ Left (TickerError lookupErr)
     Right False -> return $ Left (TickerNotFound ticker)
     Right True -> do
       env <- newEnv discover
       result <- try $ do
-        let baseUrl = "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
+        let baseUrl = T.unpack $ yahooFinanceBaseUrl config <> "/" <> ticker
         let queryParams = [("range", Just "1d"), ("interval", Just "1m"), ("includePrePost", Just "true"), ("events", Just "div,split")]
         let headersParams = [("User-Agent", "Mozilla/5.0"), ("Accept-Encoding", "gzip, deflate")]
         request <- parseRequest baseUrl
@@ -69,9 +75,11 @@ copyUrltoS3 ticker = do
             currentTime <- getCurrentTime
             let datePath = formatTime defaultTimeLocale "%Y/%m/%d" currentTime
             let timeStamp = formatTime defaultTimeLocale "%H%M%S" currentTime
-            let objectKey = pack $ "financial-data/" ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
+            let pathPrefix = s3Prefix config
+            let objectKey = T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
             let bodySource = getResponseBody response
-            let putReq = newPutObject "nf-json-data" (ObjectKey objectKey) $ toBody bodySource
+            let blobName = BucketName $ s3Bucket config
+            let putReq = newPutObject blobName (ObjectKey objectKey) $ toBody bodySource
 
             uploadResult <- try $ runResourceT $ do
               _resp <- send env putReq
@@ -106,17 +114,23 @@ errorToResponse :: CopyToS3Error -> (Status, String)
 errorToResponse (TickerError (HttpError _)) = (status502, "Failed to verify ticker")
 errorToResponse (TickerError (JsonParseError _)) = (status502, "Invalid response from ticker lookup")
 errorToResponse (TickerError (InvalidResponse msg)) = (status502, msg)
-errorToResponse (TickerNotFound ticker) = (status404, "Ticker not found: " <> unpack ticker)
+errorToResponse (TickerNotFound ticker) = (status404, "Ticker not found: " <> T.unpack ticker)
 errorToResponse (NetworkError _) = (status502, "Network error fetching data")
 errorToResponse (S3UploadError _) = (status500, "Failed to upload to S3")
 errorToResponse (ApiError code msg) = (toEnum code, msg)
 
 -- Ticker lookup
-tickerLookup :: Ticker -> IO (Either TickerLookupError Bool)
-tickerLookup ticker = do
+-- rewrite using eitherT
+tickerLookup :: Ticker -> AppConfig -> IO (Either TickerLookupError Bool)
+tickerLookup ticker config = do
   result <- try $ do
-    request <- parseRequest $ unpack $ "https://query1.finance.yahoo.com/v1/finance/lookup?query=" <> ticker
-    let requestWithHeaders = setRequestHeaders [("User-Agent", "Mozilla/5.0")] request
+    let queryUrl = yahooFinanceLookupUrl config
+    request <- parseRequest $ T.unpack queryUrl
+    let requestWithHeaders =
+          setRequestHeaders [("User-Agent", "Mozilla/5.0")] $
+            setRequestQueryString
+              [("query", Just $ BS.pack $ T.unpack ticker)]
+              request
     httpJSONEither requestWithHeaders
 
   case result of

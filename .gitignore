@@ -2,3 +2,4 @@ scratch-work/**
 dist-newstyle/**
 .terraform/
 .terraform.lock.hcl
+config.json
