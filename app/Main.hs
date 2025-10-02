@@ -196,8 +196,8 @@ instance ToJSON AuthInfo
 --   x b. if we get an error back from yahoo finance
 --   x c. if we get an error from AWS
 
--- Get hardcoded values from ENV Vars (write code for a Config)
--- Error handling of config (ie. if env vars are wrong or don't exist)
+-- x Get hardcoded values from ENV Vars (write code for a Config)
+-- x Error handling of config (ie. if env vars are wrong or don't exist)
 -- Handle error if no AWS credentials exist
 
 -- Terraform

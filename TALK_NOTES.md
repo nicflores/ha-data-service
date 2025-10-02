@@ -23,23 +23,25 @@ Paragraph Summary:
 3. Web servers are hard
 4. Car analogy
 
-I wanted to learn as much as I could about writing my own web servers. Luckily throughout my career I've had the oppotunity to work with libraries like Http4s, ZIO Https, and Rust's Axum & Actix. Over the years, though, I've realized web servers are HARD! There's a lot they need to do. So, instead learning the inner workings of all of these frameworks, I carried a mental model of web requests and their forms in my head. So when I approached each of these libraries I asked my self - How do I write a Router? - How do I add a header? - How do I pass path parameter? - etc. Withouth knowing really what's going on under the hood. Kinda like one of those car owners that never really knows much about how their car works.
+I wanted to learn as much as I could about writing my own web servers. Luckily throughout my career I've had the oppotunity to work with libraries like Http4s, ZIO Https, and Rust's Axum & Actix. Over the years, though, I've realized web servers are HARD! There's a lot they need to do. So, instead learning the inner workings of all of these frameworks, I've carried a mental model of web requests and their structure in my head. So when I approached each of these libraries I asked my self - How do I write a Router? - How do I add a header? - How do I pass path parameter? - etc. Withouth needing to dig too much under the hood for each framework.
 
 
-### Main Goal
+### Presentation Goal
 What I hope to build, over a series of talks, is a server that periodically downloads Yahoo finance data to an S3 bucket.
-Depending on how things go, we could eventually 
-1. write some Haskell to do some kind of simple analysis on the downloaded data
-2. write a samll distributed system and have the main service communicate with the second service over a message bus, the second service can maybe do some post processing
-3. or maybe we can do some NLP on some news snippets.
+Depending on how things go, we could eventually
+1. a web api backend to download Yahoo finance data to an S3 bucket
+2. write some Haskell to do some kind of simple analysis on the financial data downloaded to an S3 bucket
+3. write a samll distributed system and have the leader service communicate with the a worker service over grpc or a message bus, with the leader service to receive messages 
+4. or we can do some sentiment on company news snippets
 
-## Scotty - Haskell Web Framework
+## Haskell Web Framework
 
 In the spirit of continuing my interest in writing web servers. I want to now dive into this topic usign Haskell. We'll start by with a very simple example and build up over time all the while examining the underlying functional aspects of the Haskell we are writing.
 
-We'll be using Haskell's Scotty web framework.
+A quick search reveals several web frameworks available within the Haskell ecosystem: `Yesod`, `Servant`, `Scotty`.
+In this talk we'll be using Scotty. The only reason for this choice was because at a glace at a basic server and handler for each of these frameworks, Scotty looked the most straight foward and most familiar to me.
 
-To get started, let's see what a simple get request looks like using Scotty.
+To get started, a simple get request looks like using Scotty.
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
@@ -47,16 +49,18 @@ module Main where
 import Web.Scotty (ScottyM, get, scotty, text)
 
 main :: IO ()
-main = scotty 8080 $ do
-  get "/" $ text "Yay!"
+main = scotty 8080 $ do  -- <------ you start the server on port 8080
+  get "/" $ text "Yay!"  -- <------ define a web endpoint/handler
 ```
 
-Here `scotty` starts a server on port 8080 and the `get` line defines a handler for requests to `/`.
-Seems straightfoward enough to add a second handler. We'll be adding a handler to move a Yahoo fianance file to S3.
+Here `scotty` starts a server on port `8080` and the `get` line defines a handler for requests to `/`.
+Seems straightfoward enough to add a second handler. We'll be adding two handlers one to check the health of the service and one to download a file from Yahoo fianance to S3.
 
-## Amazonka - Haskell AWS SDK
-Amazonka is the Haskell library we'll be using to interface with AWS. Amazonka has some additional libraries specific to
-various resources they offer, for example `amazonka-s3`, which we'll see later.
+## Haskell AWS SDK
+Since we'll be writing a file to S3 we need a Haskell AWS library. Again a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `amazonka` event though its a bit older I like how they've isolated the interaction with various AWS resources by publishing libraries like `amazonka-s3`, `amazonka-ec2`, `amazonka-sns` etc.
+
+Here'e well be using `amazonka`, `amazonka-s3`, and `amazonka-sts` (security token service)
+A simple example of using `amazonka` is as follows:
 
 ```haskell
 checkAwsAuth :: IO (Either String AuthInfo)
@@ -77,13 +81,15 @@ checkAwsAuth = do
 ```
 
 Here we call the `newEnv discover` which will try different ways to attempt to log into AWS.
-Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify
-the identity of account we are logged in as.
+Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify the identity of account we are logged in as.
 
 We'll use this to write files to S3.
 
-### Http-Conduit - Haskell HTTP Client
-`http-conduit` is derived from a lower level library `http-client`. We'll need this to download data from remote http data sources.
+### Haskell HTTP Client
+Again, a quick search reveals a few libraries we can use: `http-client`, `wreq`, and `http-conduit`.
+
+`http-conduit` is derived from `http-client`. So let's take a stab at using `http-conduit`. 
+The equivalent of doing a `curl https://google.come` looks like this using `http-conduit`.
 
 ```haskell
 simpleHttp :: IO (Either HttpException Int)
