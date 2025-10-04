@@ -100,18 +100,13 @@ simpleHttp = do
     return $ getResponseStatusCode response
 ```
 
-### Tying things together
-Now that we know how to authenticate to AWS and make an http request we might have enough to put something together to:
-1. download a data file from Yahoo finance
-2. write the data file to S3
-
-The http request we are going to attempt o mimic in Haskell is the following
+### Headers and Parameters
+Now that we know how to make an http request we can go a little further.
+The http request we are going to formulate in code is the following `curl` request:
 
 ```console
-curl -vvv -A "Mozilla/5.0" --compressed "https://query2.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=1m&includePrePost=true&events=div%2Csplit"
+curl -A "Mozilla/5.0" --compressed "https://query2.finance.yahoo.com/v8/finance/chart/AAPL?range=1d&interval=1m&includePrePost=true&events=div%2Csplit"
 ```
-
-Which we can do using:
 
 ```haskell
 copyUrltoS3 :: IO (Either String ())
@@ -128,23 +123,39 @@ copyUrltoS3 = do
     if getResponseStatusCode response == 200
       then do
       --- write response body to S3
-      else error $ "HTTP error: " ++ show (getResponseStatusCode response)
+    else error $ "HTTP error: " ++ show (getResponseStatusCode response)
 
   case result of
     Left (ex :: HttpException) -> return $ Left (show ex)
     Right _ -> return $ Right ()
 ```
 
-This is very similar to what we did previously, just we've just added the query and header parameters.
+This is very similar to what we did previously, we've just added the query and header parameters assembled the request and then fired it off using `httpLbs`. If the response code is `200` we are ready to write to S3 if not we return string mentioning the error code. At this point there's two more tasks to do:
+
+1. Write to S3
+2. Write the body of the response to S3.
+
+### Writing to S3
+Amazonka provides a `send` function that takes the credentials and the request to send to AWS.
 
 
-Now to fill in the part where we write the file, will look something like this:
+### Writng the body to S3
+We'll use the `send` and make sure we formulate a request to S3 by building a `PutObject` using `newPutObject`
+and passing in:
+1. BucketName
+2. ObjectKey
+3. ByteString
+
+```haskell
+newPutObject BucketName ObjectKey ByteString
+```
+
+Building the three types above will look something like this:
 
 ```haskell
 copyUrltoS3 :: IO (Either String ())
 copyUrltoS3 = do
   env <- newEnv discover
-
   result <- try $ do
     let baseUrl = "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
     let queryParams = [("range", Just "1d"), ("interval", Just "1m"), ("includePrePost", Just "true"), ("events", Just "div,split")]
@@ -158,14 +169,17 @@ copyUrltoS3 = do
         currentTime <- getCurrentTime
         let datePath = formatTime defaultTimeLocale "%Y/%m/%d" currentTime
         let timeStamp = formatTime defaultTimeLocale "%H%M%S" currentTime
-        let objectKey = pack $ "financial-data/" ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
-        let bodySource = getResponseBody response
-        let putReq =
-              newPutObject "nf-json-data" (ObjectKey objectKey) $
-                toBody bodySource
+        
+        let blobName = BucketName $ s3Bucket config
+        let objectKey = ObjectKey $ T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
+        let bodySource = toBody $ getResponseBody response
+        
+        let putReq = newPutObject blobName objectKey bodySource
+        
         runResourceT $ do
           _resp <- send env putReq
           return ()
+
       else error $ "HTTP error: " ++ show (getResponseStatusCode response)
 
   case result of
@@ -173,6 +187,10 @@ copyUrltoS3 = do
     Right _ -> return $ Right ()
 ```
 
-We formulate the path, key, where we'll be writing the file in S3 and also the name of the file.
-Then we specify the bucket and again use the same `send env ...` pattern. 
+This represents the meat of what we set out to do. But there's more to do to make our application worthy of "web service". What's missing?
+
+1. we need write a handler that calls `copyUrltoS3` properly
+2. we've hardcoded quite a few things, we should probably handle that by writing a config
+3. the ticker should probably be a url path parameter
+4. better error handling, since this is a web service it would be good to return proper status codes to the client
 

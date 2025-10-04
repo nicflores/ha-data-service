@@ -76,10 +76,10 @@ copyUrltoS3 ticker config = do
             let datePath = formatTime defaultTimeLocale "%Y/%m/%d" currentTime
             let timeStamp = formatTime defaultTimeLocale "%H%M%S" currentTime
             let pathPrefix = s3Prefix config
-            let objectKey = T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
-            let bodySource = getResponseBody response
+            let objectKey = ObjectKey $ T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
+            let bodySource = toBody $ getResponseBody response
             let blobName = BucketName $ s3Bucket config
-            let putReq = newPutObject blobName (ObjectKey objectKey) $ toBody bodySource
+            let putReq = newPutObject blobName objectKey bodySource
 
             uploadResult <- try $ runResourceT $ do
               _resp <- send env putReq
