@@ -3,21 +3,22 @@
 ## Motivation
 
 Pragraph Summary:
+
 1. old timer web devs
-2. Web Servers Tomcat, Apache, Nginx*
+2. Web Servers Tomcat, Apache, Nginx\*
 
 If you have been doing web developemnt for any amount of time you probably remember the times
-when you had to deploy a web server that may host one more web code bases. Look up Tomcat, Apache, or Nginx. Though, Nginx is still useful for reverse proxies. I spent some time deploying and tweaking these servers long ago,  little that I know that you can actually write your own web servers!
-
+when you had to deploy a web server that may host one more web code bases. Look up Tomcat, Apache, or Nginx. Though, Nginx is still useful for reverse proxies. I spent some time deploying and tweaking these servers long ago, little that I know that you can actually write your own web servers!
 
 Paragraph Summary:
+
 1. Learning about Http4s
 2. Web dev perspective changed
 
 Back when I was first learning Scala, I attended a Scala talk about web APIs. At some point during the talk I rasied my hand and I naively asked "What server do you deploy your run your code in?". To which the speaker answered "Oh, we write our own.". My head exploded! I asked "How?". He answered "Oh, we use Http4s.". It was at this point that my entire perspective of web development changed.
 
-
 Paragraph Summary:
+
 1. Other web server libs
 2. Web mental model
 3. Web servers are hard
@@ -25,21 +26,30 @@ Paragraph Summary:
 
 I wanted to learn as much as I could about writing my own web servers. Luckily throughout my career I've had the oppotunity to work with libraries like Http4s, ZIO Https, and Rust's Axum & Actix. Over the years, though, I've realized web servers are HARD! There's a lot they need to do. So, instead learning the inner workings of all of these frameworks, I've carried a mental model of web requests and their structure in my head. So when I approached each of these libraries I asked my self - How do I write a Router? - How do I add a header? - How do I pass path parameter? - etc. Withouth needing to dig too much under the hood for each framework.
 
-
 ### Presentation Goal
+
 What I hope to build, over a series of talks, is a server that periodically downloads Yahoo finance data to an S3 bucket.
 Depending on how things go, we could eventually
+
 1. a web api backend to download Yahoo finance data to an S3 bucket
-2. write some Haskell to do some kind of simple analysis on the financial data downloaded to an S3 bucket
-3. write a samll distributed system and have the leader service communicate with the a worker service over grpc or a message bus, with the leader service to receive messages 
-4. or we can do some sentiment on company news snippets
 
 ## Haskell Web Framework
 
 In the spirit of continuing my interest in writing web servers. I want to now dive into this topic usign Haskell. We'll start by with a very simple example and build up over time all the while examining the underlying functional aspects of the Haskell we are writing.
 
-A quick search reveals several web frameworks available within the Haskell ecosystem: `Yesod`, `Servant`, `Scotty`.
-In this talk we'll be using Scotty. The only reason for this choice was because at a glace at a basic server and handler for each of these frameworks, Scotty looked the most straight foward and most familiar to me.
+A quick search reveals several web frameworks available within the Haskell ecosystem:
+
+1. Yesod: A full-featured, batteries-included framework with strong type safety. Uses its own templating system (Hamlet), form handling, authentication, and persistent database layer. Best for large applications where you want comprehensive features out of the box.
+2. Servant: A type-level DSL where you define your API as a type, and the framework generates both server and client code from it. Extremely type-safe and composable. Great for REST APIs where you want compile-time guarantees about your endpoints.
+3. Scotty: A lightweight, Sinatra-inspired micro-framework focused on simplicity. Minimal boilerplate, easy to learn, and good for small services or when you want to pick your own libraries for everything else. Backed by Haskells WAI (Web Application Interface) and WARP a fast HTTP server built on WAI.
+
+WAI is Haskell's standard interface between web servers and applications.
+Think of it like:
+
+1. Rack in Ruby
+2. WSGI in Python.
+
+In this talk we'll be using Scotty. The only reason for this choice was because glancing at the code for a basic server and handler for each of these frameworks, Scotty looked the most straight foward and most familiar to me.
 
 To get started, a simple get request looks like using Scotty.
 
@@ -57,6 +67,7 @@ Here `scotty` starts a server on port `8080` and the `get` line defines a handle
 Seems straightfoward enough to add a second handler. We'll be adding two handlers one to check the health of the service and one to download a file from Yahoo fianance to S3.
 
 ## Haskell AWS SDK
+
 Since we'll be writing a file to S3 we need a Haskell AWS library. Again a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `amazonka` event though its a bit older I like how they've isolated the interaction with various AWS resources by publishing libraries like `amazonka-s3`, `amazonka-ec2`, `amazonka-sns` etc.
 
 Here'e well be using `amazonka`, `amazonka-s3`, and `amazonka-sts` (security token service)
@@ -86,9 +97,10 @@ Once we have our `env` we can use it to send requests to AWS. In this case we as
 We'll use this to write files to S3.
 
 ### Haskell HTTP Client
+
 Again, a quick search reveals a few libraries we can use: `http-client`, `wreq`, and `http-conduit`.
 
-`http-conduit` is derived from `http-client`. So let's take a stab at using `http-conduit`. 
+`http-conduit` is derived from `http-client`. So let's take a stab at using `http-conduit`.
 The equivalent of doing a `curl https://google.come` looks like this using `http-conduit`.
 
 ```haskell
@@ -101,6 +113,7 @@ simpleHttp = do
 ```
 
 ### Headers and Parameters
+
 Now that we know how to make an http request we can go a little further.
 The http request we are going to formulate in code is the following `curl` request:
 
@@ -136,12 +149,14 @@ This is very similar to what we did previously, we've just added the query and h
 2. Write the body of the response to S3.
 
 ### Writing to S3
+
 Amazonka provides a `send` function that takes the credentials and the request to send to AWS.
 
-
 ### Writng the body to S3
+
 We'll use the `send` and make sure we formulate a request to S3 by building a `PutObject` using `newPutObject`
 and passing in:
+
 1. BucketName
 2. ObjectKey
 3. ByteString
@@ -169,13 +184,13 @@ copyUrltoS3 = do
         currentTime <- getCurrentTime
         let datePath = formatTime defaultTimeLocale "%Y/%m/%d" currentTime
         let timeStamp = formatTime defaultTimeLocale "%H%M%S" currentTime
-        
+
         let blobName = BucketName $ s3Bucket config
         let objectKey = ObjectKey $ T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
         let bodySource = toBody $ getResponseBody response
-        
+
         let putReq = newPutObject blobName objectKey bodySource
-        
+
         runResourceT $ do
           _resp <- send env putReq
           return ()
@@ -194,3 +209,21 @@ This represents the meat of what we set out to do. But there's more to do to mak
 3. the ticker should probably be a url path parameter
 4. better error handling, since this is a web service it would be good to return proper status codes to the client
 
+### Copy URL Handler
+
+### Config
+
+### Ticker URL Parameter
+
+### Error Handling
+
+### Exercise Deployed Service
+
+curl localhost:8080/download/AAPL
+list files
+
+### Additional Work
+
+1. write some Haskell to do some kind of simple analysis on the financial data downloaded to an S3 bucket
+2. write a samll distributed system and have the leader service communicate with the a worker service over grpc or a message bus, with the leader service to receive messages
+3. or we can do some sentiment on company news snippets
