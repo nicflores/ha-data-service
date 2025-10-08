@@ -273,126 +273,6 @@ response <- httpLbs request
 
 ---
 
-# Excercise
-
-Build the handler for the `/download/<ticker>` endpoint.
-
-. . .
-
-```haskell
-main :: IO ()
-main = scotty 8080 $ do
-  get "/" $ text "Hello!"
-```
-
-. . .
-
-```haskell
-getData :: ScottyM ()
-getData = get "/download/:ticker" $ do
-  ticker <- pathParam "ticker"
-  result <- -- do something here --
-  case result of
-    Left err -> ...
-    Right _ -> ...
-```
-
-. . .
-
-```haskell
-main :: IO ()
-main = scotty 8080 $ do
-  getData
-```
-
----
-
-# Excercise
-
-Build the handler for the `/download/<ticker>` endpoint.
-
-&nbsp;
-
-&nbsp;
-
-&nbsp;
-
-```haskell
-getData :: ScottyM ()
-getData = get "/download/:ticker" $ do
-  ticker <- pathParam "ticker"
-  result <- -- do something here --
-  case result of
-    Left err -> ...
-    Right _ -> ...
-```
-
-```haskell
-main :: IO ()
-main = scotty 8080 $ do
-  getData
-```
-
-. . .
-
-```haskell
-data ApiResponse
-  = Success {status_code :: Int}
-  | Error {error_message :: String}
-  deriving (Generic, Show)
-instance ToJSON ApiResponse
-```
-
----
-
-# Excercise
-
-Build the handler for the `/download/<ticker>` endpoint.
-
-&nbsp;
-
-&nbsp;
-
-&nbsp;
-
-```haskell
-getData :: ScottyM ()
-getData = get "/download/:ticker" $ do
-  ticker <- pathParam "ticker"
-  result <- -- do something here --
-  case result of
-    Left err -> json $ Error (show err)
-    Right _ -> json $ Success 200
-```
-
-```haskell
-main :: IO ()
-main = scotty 8080 $ do
-  getData
-```
-
-```haskell
-data ApiResponse
-  = Success {status_code :: Int}
-  | Error {error_message :: String}
-  deriving (Generic, Show)
-instance ToJSON ApiResponse
-```
-
----
-
-# Excercise
-
-Build the handler for the `/download/<ticker>` endpoint.
-
-```haskell
-copyUrltoS3 :: Ticker -> IO ()
-copyUrltoS3 ticker = do
-  -- do stuff here --
-```
-
----
-
 # AWS Libraries
 
 . . .
@@ -442,6 +322,15 @@ checkAwsAuth = do
     Right authInfo -> return $ Right authInfo
 ```
 
+. . .
+
+`discover` finds credentials
+
+- environment variables
+- config files
+- web identity
+- ecs container agent
+
 ---
 
 # Using Amazonka
@@ -464,56 +353,25 @@ checkAwsAuth = do
     Right authInfo -> return $ Right authInfo
 ```
 
----
+. . .
 
-# Using Amazonka
-
-Let's see how Amazonka works.
-
-```haskell
-import Amazonka (discover, newEnv, runResourceT, send)
-import Amazonka.STS (newGetCallerIdentity)
-
-checkAwsAuth :: IO (Either String AuthInfo)
-checkAwsAuth = do
-  result <- try $ do
-    env <- newEnv discover
-    runResourceT $ do
-      response <- send env newGetCallerIdentity
-      return $
-        AuthInfo
-          { account = response ^. getCallerIdentityResponse_account,
-            arn = response ^. getCallerIdentityResponse_arn,
-            userId = response ^. getCallerIdentityResponse_userId
-          }
-  case result of
-    Left (ex :: SomeException) -> return $ Left (show ex)
-    Right authInfo -> return $ Right authInfo
-```
+In our case we'll swap `newGetCallerIdentity` by request to write a file to S3.
 
 ---
 
-# Probably need to re-order things above a little
+# Application Config
 
 ---
 
-# Composing Functions
+# Testing
 
 ---
 
-# Real World Example
+# AWS Deployment
 
 ---
 
-# Performance Comparison
-
----
-
-# Advanced Pattern
-
----
-
-# Best Practices
+# Quick Demo
 
 ---
 
@@ -521,23 +379,35 @@ checkAwsAuth = do
 
 . . .
 
-→ Types are your **design tool**
+→ Haskell eco system was better than I exepcted.
 
 . . .
 
-→ Compiler catches bugs **before runtime**
+→ Library serach is on par with Rust library search, I believe.
 
 . . .
 
-→ Refactoring becomes **safe and easy**
+→ Getting used to some of the operators takes a little bit of thought.
 
 . . .
 
-→ Code becomes **self-documenting**
+→ Deploying haskell services takes about a long as it does in Rust.
 
 ---
 
-# Adding Features
+# Future Ideas
+
+. . .
+
+Things to add
+
+- more tests
+- better logging
+- instead of making a request to download data do it on a scheduler (ie. write a scheduler)
+
+. . .
+
+What else could we present?
 
 - do an analysis on download data
 - turn this into a distributed system event driven system with a leader and workers

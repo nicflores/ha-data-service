@@ -46,7 +46,6 @@ downloadTickerData config = post "/download/:ticker" $ do
       json $ object ["error" .= ("Invalid ticker format" :: Text)]
     else do
       result <- liftIO $ copyUrltoS3 productionDeps (decodeUtf8 ticker) config
-
       case result of
         Left err -> do
           let (httpStatus, message) = errorToResponse err
@@ -209,15 +208,11 @@ copyUrltoS3 deps ticker config = do
 tickerLookup :: Ticker -> AppConfig -> IO (Either TickerLookupError Bool)
 tickerLookup ticker config = do
   result <- try $ do
-    let queryUrl = yahooFinanceLookupUrl config
-    request <- parseRequest $ T.unpack queryUrl
-    let requestWithHeaders =
-          setRequestHeaders [("User-Agent", "Mozilla/5.0")] $
-            setRequestQueryString
-              [("query", Just $ BS.pack $ T.unpack ticker)]
-              request
-    httpJSONEither requestWithHeaders
-
+    let queryUrl = T.unpack $ yahooFinanceLookupUrl config
+    let headers = [("User-Agent", "Mozilla/5.0")]
+    let params = [("query", Just $ BS.pack $ T.unpack ticker)]
+    request <- setRequestHeaders headers . setRequestQueryString params <$> parseRequest queryUrl
+    httpJSONEither request
   case result of
     Left httpEx -> return $ Left (HttpError httpEx)
     Right response ->
