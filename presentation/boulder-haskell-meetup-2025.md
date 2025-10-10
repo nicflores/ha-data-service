@@ -361,9 +361,65 @@ In our case we'll swap `newGetCallerIdentity` by request to write a file to S3.
 
 # Application Config
 
+Requierments
+
+- run locally
+- read environment
+
+. . .
+
+```haskell
+data AppConfig = AppConfig
+  { s3Bucket :: Text,
+    s3Prefix :: Text,
+    yahooFinanceBaseUrl :: Text,
+    yahooFinanceLookupUrl :: Text,
+    dataRange :: Text,
+    dataInterval :: Text,
+    serverPort :: Int,
+    awsRegion :: Text
+  }
+```
+
+. . .
+
+```haskell
+loadConfigFromFile :: FilePath -> IO (Maybe AppConfig)
+```
+
+. . .
+
+```haskell
+loadConfigFromEnv :: IO (Maybe AppConfig)
+```
+
+. . .
+
+then use the alternative operator `<|>` between them
+
 ---
 
 # Testing
+
+```console
+├── app
+│   └── Main.hs
+├── config.json
+├── hs-user-mgr.cabal
+├── src
+│   ├── Config.hs
+│   ├── DataService.hs
+│   ├── Handlers.hs
+│   ├── TickerLookup.hs
+│   └── Types.hs
+└── test
+    ├── ConfigSpec.hs
+    ├── DataServiceSpec.hs
+    ├── HandlersSpec.hs
+    ├── Spec.hs
+    ├── TickerLookupSpec.hs
+    └── TypesSpec.hs
+```
 
 ---
 
@@ -383,7 +439,7 @@ In our case we'll swap `newGetCallerIdentity` by request to write a file to S3.
 
 . . .
 
-→ Library serach is on par with Rust library search, I believe.
+→ Library search is on par with Rust library search, I believe.
 
 . . .
 
