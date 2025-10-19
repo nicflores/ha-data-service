@@ -1,7 +1,7 @@
 module Main where
 
 import Config (loadConfig)
-import Handlers (downloadTickerData, healthEndpoint)
+import Handlers (downloadTickerData, healthCheck)
 import Types (AppConfig (serverPort))
 import Web.Scotty (scotty)
 
@@ -10,7 +10,7 @@ main = do
   config <- loadConfig
   let port = serverPort config
   scotty port $ do
-    healthEndpoint
+    healthCheck
     downloadTickerData config
 
 -- TODO

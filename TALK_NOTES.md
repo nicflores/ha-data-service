@@ -32,10 +32,13 @@ What I hope to build, over a series of talks, is a server that periodically down
 Depending on how things go, we could eventually
 
 1. a web api backend to download Yahoo finance data to an S3 bucket
+2. Get Programming with Haskell by `Will Kurt`. Will Kurt mentions web
+   development towards the end the book (around page 500ish). This talk takes some of the
+   ideas presented at the end of that book and goes a little further.
 
 ## Haskell Web Framework
 
-In the spirit of continuing my interest in writing web servers. I want to now dive into this topic usign Haskell. We'll start by with a very simple example and build up over time all the while examining the underlying functional aspects of the Haskell we are writing.
+In the spirit of continuing my interest in writing web servers. I want to dive into this topic usign Haskell. We'll start by with a very simple example and build up over time all the while examining the underlying functional aspects of the Haskell we are writing.
 
 A quick search reveals several web frameworks available within the Haskell ecosystem:
 
@@ -64,37 +67,145 @@ main = scotty 8080 $ do  -- <------ you start the server on port 8080
 ```
 
 Here `scotty` starts a server on port `8080` and the `get` line defines a handler for requests to `/`.
-Seems straightfoward enough to add a second handler. We'll be adding two handlers one to check the health of the service and one to download a file from Yahoo fianance to S3.
 
-## Haskell AWS SDK
+`ScottyM` is a scotty web app - it describes how to process requests and the responses it should send
 
-Since we'll be writing a file to S3 we need a Haskell AWS library. Again a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `amazonka` event though its a bit older I like how they've isolated the interaction with various AWS resources by publishing libraries like `amazonka-s3`, `amazonka-ec2`, `amazonka-sns` etc.
+`ActionM` describes what to do when receving a request
 
-Here'e well be using `amazonka`, `amazonka-s3`, and `amazonka-sts` (security token service)
-A simple example of using `amazonka` is as follows:
+We'll be adding two handlers:
+
+- a get endpoint to check the health of the service
+- a put endpoint to download a file from Yahoo fianance to S3.
+
+### Health Handler
+
+Since
 
 ```haskell
-checkAwsAuth :: IO (Either String AuthInfo)
-checkAwsAuth = do
-  result <- try $ do
-    env <- newEnv discover
-    runResourceT $ do
-      response <- send env newGetCallerIdentity
-      return $
-        AuthInfo
-          { account = response ^. getCallerIdentityResponse_account,
-            arn = response ^. getCallerIdentityResponse_arn,
-            userId = response ^. getCallerIdentityResponse_userId
-          }
-  case result of
-    Left (ex :: SomeException) -> return $ Left (show ex)
-    Right authInfo -> return $ Right authInfo
+get :: RoutePattern -> ActionM () -> ScottyM ()
 ```
 
-Here we call the `newEnv discover` which will try different ways to attempt to log into AWS.
-Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify the identity of account we are logged in as.
+then we can pick `healthCheck`'s signature to look like:
 
-We'll use this to write files to S3.
+```haskell
+healthCheck :: ScottyM ()
+```
+
+then we add the get RoutePattern
+
+```haskell
+healthCheck :: ScottyM ()
+healthCheck =
+  get "/health" $ do
+```
+
+we can use `do` here because of `ActionM ()`.
+
+The action can now simply be:
+
+```haskell
+healthCheck :: ScottyM ()
+healthCheck =
+  get "/health" $ do
+  json $ Health "OK"
+```
+
+where `Health` is the data type
+
+```haskell
+newtype Health = Health
+  {health_status :: Text}
+  deriving (Show, Eq, Generic)
+instance ToJSON Health
+```
+
+We use `newtype` since we are only creating a type with one field.
+
+### Download Handler
+
+The download handler is a bit more involved.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+```
+
+This handler will take an AppConfig parameter. Why?
+Well, it needs to know which bucket to write the data and various other pieces of info in order to do it's job.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  -- ??? --
+```
+
+Here we see the app config parameter and also the path parameter.
+Again, we can use the `do` notation because the of `ActionM ()`.
+
+First task is to extract the path parameter using `pathParam`.
+
+We'll do a little ad-hoc validation on the passed in ticker. If that check fails
+we return a 400. If validation is ok we proceed.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      -- ??? --
+```
+
+There are two stubs here. One where we ideally perform some work and get a `result`.
+And the other stub, where we handle what we get in the `result`.
+
+Let's handle the `result` first:
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 5
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+Supposing the `result` is an `Either` we pattern match and handle each situation.
+
+What's left to define here is the real work this function should do.
+
+Let's build up what the type of the function that should go here (the one that does the work).
+
+I already mentioned either. So we should expect something like `Either X Y`.
+We are in a `do` block, so we can pick type that we can use here. We know that
+this function need to make web requests, which a side effect ... ie. IO. so maybe the function that should go here should return an `IO (Either X Y)`.
+
+Lastly, we're in `IO`. and the `do` notation right above `result` puts us in `ActionM` which if you look in the source code you it's a synonym for `ActionT` which dervies all the "good" type classes to `lift our IO` into `ActionT`.
+
+So the stub above will look like:
+
+```haskell
+      result <- liftIO $ -- IO (Either X Y)
+```
+
+So, you can imagine what goes on the right hand of the `liftIO`.
+It'll be something like this:
+
+```haskell
+      result <- liftIO $ copyDatatoS3 ticker config
+```
+
+since `ticker` and `config` are available to us. This should be enough for us to build what we need.
 
 ### Haskell HTTP Client
 
@@ -122,35 +233,63 @@ curl -A "Mozilla/5.0" --compressed "https://query2.finance.yahoo.com/v8/finance/
 ```
 
 ```haskell
-copyUrltoS3 :: IO (Either String ())
-copyUrltoS3 = do
-  env <- newEnv discover
+import Network.HTTP.Simple (httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
 
-  result <- try $ do
-    let baseUrl = "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
-    let queryParams = [("range", Just "1d"), ("interval", Just "1m"), ("includePrePost", Just "true"), ("events", Just "div,split")]
-    let headersParams = [("User-Agent", "Mozilla/5.0"), ("Accept-Encoding", "gzip, deflate")]
-    request <- parseRequest baseUrl
-    let requestWithOptions = setRequestHeaders headersParams $ setRequestQueryString queryParams request
-    response <- httpLbs requestWithOptions
-    if getResponseStatusCode response == 200
-      then do
-      --- write response body to S3
-    else error $ "HTTP error: " ++ show (getResponseStatusCode response)
-
-  case result of
-    Left (ex :: HttpException) -> return $ Left (show ex)
-    Right _ -> return $ Right ()
+let baseUrl = T.unpack $ "https://query2.finance.yahoo.com" <> "/" <> ticker
+let headersParams = [
+    ("User-Agent", "Mozilla/5.0")
+  , ("Accept-Encoding", "gzip, deflate")
+]
+let queryParams = [
+    ("range", Just "1d")
+  , ("interval", Just "1m")
+  , ("includePrePost", Just "true")
+  , ("events", Just "div,split")
+]
+request <- setRequestHeaders headersParams . setRequestQueryString queryParams <$> parseRequest baseUrl
+response <- httpLbs request
 ```
 
-This is very similar to what we did previously, we've just added the query and header parameters assembled the request and then fired it off using `httpLbs`. If the response code is `200` we are ready to write to S3 if not we return string mentioning the error code. At this point there's two more tasks to do:
+This is very similar to what we did previously, we've just added the query and header parameters assembled the request and then fired it off using `httpLbs`.
+
+If the response code is `200` we are ready to write to S3 if not we return string mentioning the error code. At this point there's two more tasks to do:
 
 1. Write to S3
 2. Write the body of the response to S3.
 
-### Writing to S3
+### AWS Libraries
 
 Amazonka provides a `send` function that takes the credentials and the request to send to AWS.
+
+## Haskell AWS SDK
+
+Since we'll be writing a file to S3 we need a Haskell AWS library. Again, a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `amazonka` event though its a bit older I like how they've isolated the interaction with various AWS resources by publishing libraries like `amazonka-s3`, `amazonka-ec2`, `amazonka-sns` etc.
+
+Here we'll be using `amazonka`, `amazonka-s3`, and `amazonka-sts` (security token service)
+A simple example of using `amazonka` is as follows:
+
+```haskell
+checkAwsAuth :: IO (Either String AuthInfo)
+checkAwsAuth = do
+  result <- try $ do
+    env <- newEnv discover
+    runResourceT $ do
+      response <- send env newGetCallerIdentity
+      return $
+        AuthInfo
+          { account = response ^. getCallerIdentityResponse_account,
+            arn = response ^. getCallerIdentityResponse_arn,
+            userId = response ^. getCallerIdentityResponse_userId
+          }
+  case result of
+    Left (ex :: SomeException) -> return $ Left (show ex)
+    Right authInfo -> return $ Right authInfo
+```
+
+Here we call the `newEnv discover` which will try different ways to attempt to log into AWS.
+Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify the identity of account we are logged in as.
+
+We'll use this to write files to S3.
 
 ### Writng the body to S3
 

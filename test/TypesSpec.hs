@@ -2,10 +2,19 @@
 
 module TypesSpec where
 
--- import qualified Data.Text as T
 import Network.HTTP.Types (status404, status500, status502)
-import Test.Hspec
+import Test.Hspec (Spec, describe, it, shouldBe, shouldContain)
 import Types
+  ( CopyToS3Error
+      ( ApiError,
+        NetworkError,
+        S3UploadError,
+        TickerNotFound
+      ),
+    FetchConfig (FetchConfig, baseUrl, interval, range),
+    S3Config (S3Config, bucket, prefix),
+    errorToResponse,
+  )
 
 spec :: Spec
 spec = do

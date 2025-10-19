@@ -5,8 +5,8 @@ module TickerLookup where
 import Control.Exception (try)
 import Data.Aeson (Value (Object), (.:))
 import Data.Aeson.Types (parseMaybe)
-import Data.ByteString.Char8 as BS
-import Data.Text as T (unpack)
+import qualified Data.ByteString.Char8 as BS
+import qualified Data.Text as T
 import Network.HTTP.Simple (getResponseBody, httpJSONEither, parseRequest, setRequestHeaders, setRequestQueryString)
 import Types (AppConfig (yahooFinanceLookupUrl), Ticker, TickerLookupError (HttpError, InvalidResponse, JsonParseError))
 

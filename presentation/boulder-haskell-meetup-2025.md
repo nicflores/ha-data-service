@@ -54,11 +54,11 @@ Boulder Haskell MeetUp
 
 . . .
 
-→ Mention library and choices made to help accomplish our goal.
+→ Library choices made to help accomplish our goal.
 
 . . .
 
-→ Learn how to make http request to third party API.
+→ Assembling web requests.
 
 . . .
 
@@ -70,7 +70,7 @@ Boulder Haskell MeetUp
 
 . . .
 
-→ Look at testing techniques.
+→ Testing techniques.
 
 . . .
 
@@ -102,8 +102,7 @@ Boulder Haskell MeetUp
 
 I chose to use `Scotty`
 
-- it looked familiar
-- simplicity
+- examples in documentation look simple and clear to follow
 
 ---
 
@@ -135,6 +134,12 @@ main = scotty 8080 $ do    --  <-- start the server on port 8080
   get "/" $ text "Hello!"
 ```
 
+. . .
+
+```haskell
+scotty :: Port -> ScottyM () -> IO ()
+```
+
 ---
 
 # Using Scotty
@@ -147,6 +152,357 @@ main = scotty 8080 $ do    --  <-- start the server on port 8080
 main :: IO ()
 main = scotty 8080 $ do    --  <-- start the server on port 8080
   get "/" $ text "Hello!"  --  <-- defines a get web api endpoint
+```
+
+```haskell
+scotty :: Port -> ScottyM () -> IO ()
+```
+
+. . .
+
+```haskell
+get :: RoutePattern -> ActionM () -> ScottyM ()
+```
+
+. . .
+
+We'll be writing two handlers:
+
+- get `/health` for the cluster to check service health
+- post `/download/:ticker` to allow users to download Yahoo fianance data to S3
+
+---
+
+# Scotty Health Handler
+
+. . .
+
+Let's define the `get` handler.
+
+. . .
+
+```haskell
+healthCheck :: ScottyM ()
+```
+
+---
+
+# Scotty Health Handler
+
+Let's define the `get` handler.
+
+```haskell
+healthCheck :: ScottyM ()
+healthCheck =
+  get "/health" $ do
+  -- ??? --
+```
+
+---
+
+# Scotty Health Handler
+
+Let's define the `get` handler.
+
+```haskell
+healthCheck :: ScottyM ()
+healthCheck =
+  get "/health" $ do
+    json $ Health "OK"
+```
+
+. . .
+
+`Health` is defined as:
+
+```haskell
+newtype Health = Health
+  {health_status :: Text}
+  deriving (Show, Eq, Generic)
+
+instance ToJSON Health
+```
+
+---
+
+# Scotty Download Handler
+
+. . .
+
+Now we define the `post` handler.
+
+. . .
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  -- ??? --
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  -- ??? --
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      -- ??? --
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      -- ??? --
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+    result <- -- Either X Y
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+    result <- -- IO (Either X Y)
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do               -- <------------- ???
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+    result <- -- IO (Either X Y)
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do               -- <------------- ActionT
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+    result <- -- IO (Either X Y)
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do               -- <------------- ActionT
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+    result <- liftIO $ -- IO (Either X Y)
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 10
+    then do
+      status status400
+    else do
+      result <- -- ??? ---
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
+```
+
+```haskell
+result <- liftIO $ copyDatatoS3 ticker config
+```
+
+---
+
+# Scotty Download Handler
+
+Now we define the `post` handler.
+
+```haskell
+downloadTickerData :: AppConfig -> ScottyM ()
+downloadTickerData config = post "/download/:ticker" $ do
+  ticker <- pathParam "ticker"
+  if BS.null ticker || BS.length ticker > 5
+    then do
+      status status400
+    else do
+      result <- liftIO $ copyDataToS3 ticker config
+      case result of
+        Left err -> do
+          let (httpStatus, _) = errorToResponse err
+          status httpStatus
+        Right _ -> do
+          status status200
 ```
 
 ---
@@ -233,18 +589,21 @@ Requesting data by ticker
 
 # Yahoo Finance Request
 
+. . .
+
 ```haskell
 import Network.HTTP.Simple (httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
 
-let baseUrl = T.unpack $ "https://query2.finance.yahoo.com" <> "/" <> ticker
-let headersParams = [...]
-let queryParams = [...]
-request <- setRequestHeaders headersParams . setRequestQueryString queryParams <$> parseRequest baseUrl
-response <- httpLbs request
+buildYahooRequest :: FetchConfig -> Ticker -> IO Request
+buildYahooRequest config ticker = do
+  let url = T.unpack $ baseUrl config <> "/" <> ticker
+  let queryParams = [...]
+  let headers = [...]
+  setRequestHeaders headers . setRequestQueryString queryParams <$> parseRequest url
 ```
 
-- `.` is function composition
-- `<$>` is the infix operator for `fmap`
+- `.` is function composition: `(f . g) x = f (g x)`
+- `<$>` map a function over a functor: `(+1) <$> [1, 2, 3] = [2,3,4]`
 
 ---
 
@@ -253,23 +612,21 @@ response <- httpLbs request
 ```haskell
 import Network.HTTP.Simple (httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
 
-let baseUrl = T.unpack $ "https://query2.finance.yahoo.com" <> "/" <> ticker
-let headersParams = [
-    ("User-Agent", "Mozilla/5.0")
-  , ("Accept-Encoding", "gzip, deflate")
-]
-let queryParams = [
-    ("range", Just "1d")
-  , ("interval", Just "1m")
-  , ("includePrePost", Just "true")
-  , ("events", Just "div,split")
-]
-request <- setRequestHeaders headersParams . setRequestQueryString queryParams <$> parseRequest baseUrl
-response <- httpLbs request
+buildYahooRequest :: FetchConfig -> Ticker -> IO Request
+buildYahooRequest config ticker = do
+  let url = T.unpack $ baseUrl config <> "/" <> ticker
+  let queryParams = [
+      ("User-Agent", "Mozilla/5.0")
+    , ("Accept-Encoding", "gzip, deflate")
+  ]
+  let headers = [
+      ("range", Just "1d")
+    , ("interval", Just "1m")
+    , ("includePrePost", Just "true")
+    , ("events", Just "div,split")
+  ]
+  setRequestHeaders headers . setRequestQueryString queryParams <$> parseRequest url
 ```
-
-- `.` is function composition
-- `<$>` is the infix operator for `fmap`
 
 ---
 
@@ -355,7 +712,192 @@ checkAwsAuth = do
 
 . . .
 
-In our case we'll swap `newGetCallerIdentity` by request to write a file to S3.
+Here we send `newGetCallerIdentity`.
+
+. . .
+
+In order to write a file we need to send a `PutObject`.
+
+---
+
+# Writing to S3
+
+. . .
+
+```haskell
+uploadToS3 :: Env
+  -> BucketName
+  -> ObjectKey
+  -> LazyByteString
+  -> IO (Either CopyToS3Error PutObjectResponse)
+uploadToS3 env bucketName objectKey body = do
+  let putReq = newPutObject bucketName objectKey (toBody body)
+  --- ??? ---
+```
+
+---
+
+# Writing to S3
+
+```haskell
+uploadToS3 :: Env
+  -> BucketName
+  -> ObjectKey
+  -> LazyByteString
+  -> IO (Either CopyToS3Error PutObjectResponse)
+uploadToS3 env bucketName objectKey body = do
+  let putReq = newPutObject bucketName objectKey (toBody body)
+  uploadResult <- try $ runResourceT $ send env putReq
+  --- ??? --
+```
+
+---
+
+# Writing to S3
+
+```haskell
+uploadToS3 :: Env
+  -> BucketName
+  -> ObjectKey
+  -> LazyByteString
+  -> IO (Either CopyToS3Error PutObjectResponse)
+uploadToS3 env bucketName objectKey body = do
+  let putReq = newPutObject bucketName objectKey (toBody body)
+  uploadResult <- try $ runResourceT $ send env putReq
+  case uploadResult of
+    Left s3Ex -> return $ Left (S3UploadError s3Ex)
+    Right putRes -> return $ Right putRes
+```
+
+---
+
+# At this point
+
+We've written:
+
+- Our handlers (the downloder handler is mostly implemented)
+- Learned how to make http requests
+- Saw how to write a file to s3
+- We just need to assemble our copyDataToS3
+
+---
+
+# Building Copy Data to S3
+
+```haskell
+copyUrltoS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+copyUrltoS3 deps ticker config = do
+  -- extract details from the config
+  let fetchConfig =
+        FetchConfig
+          { baseUrl = yahooFinanceBaseUrl config,
+            range = dataRange config,
+            interval = dataInterval config
+          }
+```
+
+---
+
+# Building Copy Data to S3
+
+```haskell
+copyUrltoS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+copyUrltoS3 deps ticker config = do
+  -- extract details from the config
+  let fetchConfig =
+        FetchConfig
+          { baseUrl = yahooFinanceBaseUrl config,
+            range = dataRange config,
+            interval = dataInterval config
+          }
+  -- seen perviously
+  request <- buildYahooRequest fetchConfig ticker
+  -- helper to extract body from request
+  fetchResult <- depFetchData deps request
+```
+
+---
+
+# Building Copy Data to S3
+
+```haskell
+copyUrltoS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+copyUrltoS3 deps ticker config = do
+  -- extract details from the config
+  let fetchConfig =
+        FetchConfig
+          { baseUrl = yahooFinanceBaseUrl config,
+            range = dataRange config,
+            interval = dataInterval config
+          }
+  -- seen perviously
+  request <- buildYahooRequest fetchConfig ticker
+  -- helper to extract body from request
+  fetchResult <- depFetchData deps request
+  case fetchResult of
+    Left err -> return $ Left err
+    Right body -> do
+      -- get the amazonka env from dependencies
+      env <- depNewEnv deps
+      -- needed for storage path
+      currentTime <- depGetCurrentTime deps
+      -- bucket info
+      let s3Config =
+            S3Config
+              { bucket = s3Bucket config,
+                prefix = s3Prefix config
+              }
+```
+
+---
+
+# Building Copy Data to S3
+
+```haskell
+copyDataToS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+copyDataToS3 deps ticker config = do
+  -- extract details from the config
+  let fetchConfig =
+        FetchConfig
+          { baseUrl = yahooFinanceBaseUrl config,
+            range = dataRange config,
+            interval = dataInterval config
+          }
+  -- seen perviously
+  request <- buildYahooRequest fetchConfig ticker
+  -- helper to extract body from request
+  fetchResult <- depFetchData deps request
+  case fetchResult of
+    Left err -> return $ Left err
+    Right body -> do
+      -- get the amazonka env from dependencies
+      env <- depNewEnv deps
+      -- needed for storage path
+      currentTime <- depGetCurrentTime deps
+      let s3Config =
+            S3Config
+              { bucket = s3Bucket config,
+                prefix = s3Prefix config
+              }
+      -- the storage path
+      let objectKey = generateS3Key s3Config ticker currentTime
+      -- bucket name object
+      let bucketName = BucketName (bucket s3Config)
+      -- seen before
+      depUploadToS3 deps env bucketName objectKey body
+```
 
 ---
 
@@ -416,9 +958,41 @@ then use the alternative operator `<|>` between them
     ├── ConfigSpec.hs
     ├── DataServiceSpec.hs
     ├── HandlersSpec.hs
-    ├── Spec.hs
+    ├── Spec.hs             <------ Like a main() for tests
     ├── TickerLookupSpec.hs
     └── TypesSpec.hs
+```
+
+---
+
+# Testing
+
+Notice that:
+
+```haskell
+copyDataToS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+```
+
+. . .
+
+Notice that we passed in a `Dependencies` object.
+Along with using various pure functions.
+
+. . .
+
+This allows independenly testing the various functions used `copyDataToS3`.
+
+. . .
+
+I used `hspec` to help structure my tests.
+
+. . .
+
+```haskell
+
 ```
 
 ---
@@ -457,9 +1031,10 @@ then use the alternative operator `<|>` between them
 
 Things to add
 
-- more tests
-- better logging
+- improve tests
+- improve logging
 - instead of making a request to download data do it on a scheduler (ie. write a scheduler)
+- security
 
 . . .
 
@@ -467,7 +1042,7 @@ What else could we present?
 
 - do an analysis on download data
 - turn this into a distributed system event driven system with a leader and workers
-- download news given a ticker and do sentiment on new snippets
+- download news given a ticker and do sentiment analysis on new snippets
 
 ---
 

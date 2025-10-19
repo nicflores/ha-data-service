@@ -49,8 +49,6 @@ loadConfigFromEnv = do
   intervalEnv <- lookupEnv "DATA_INTERVAL"
   portEnv <- lookupEnv "SERVER_PORT"
   regionEnv <- lookupEnv "AWS_REGION"
-
-  -- Only return Just if all required env vars are present
   case (s3BucketEnv, s3PrefixEnv, yahooBaseUrlEnv, yahooLookupUrlEnv) of
     (Just bucketEnv, Just prefixEnv, Just baseUrlEnv, Just lookupUrlEnv) -> do
       putStrLn "✓ Loaded config from environment variables"

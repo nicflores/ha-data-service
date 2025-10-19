@@ -42,6 +42,6 @@ To continually build your project as you develop it. The `.ghcid` file will help
 To start the presentation using `Patat` run the following commands in your terminal.
 
 ```console
-> cabal build
-> cabal run patat -- presentation.md
+> cabal install --lib patat
+> cabal run patat -- ./presentation/boulder-haskell-meetup-2025.md
 ```

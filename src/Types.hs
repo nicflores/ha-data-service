@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Types (Ticker, AppConfig (..), CopyToS3Error (..), Dependencies (..), S3Config (..), FetchConfig (..), TickerLookupError (..), errorToResponse) where
+module Types (Ticker, AppConfig (..), CopyToS3Error (..), Dependencies (..), S3Config (..), FetchConfig (..), TickerLookupError (..), errorToResponse, Health (..), DownloadStatus (..)) where
 
 import Amazonka (Env)
 import qualified Amazonka as Data.ByteString.Lazy.LazyByteString
@@ -10,9 +10,27 @@ import Data.ByteString.Lazy (LazyByteString)
 import Data.Text as T (Text, unpack)
 import GHC.Generics (Generic)
 import Network.HTTP.Simple (HttpException, JSONException, Request)
-import Network.HTTP.Types (Status, status404, status500, status502)
+import Network.HTTP.Types.Status (Status, status404, status500, status502)
 
 type Ticker = Text
+
+newtype Health = Health
+  {health_status :: Text}
+  deriving (Show, Eq, Generic)
+
+instance ToJSON Health
+
+instance FromJSON Health
+
+data DownloadStatus = DownloadStatus
+  { status :: Int,
+    message :: Text
+  }
+  deriving (Show, Eq, Generic)
+
+instance ToJSON DownloadStatus
+
+instance FromJSON DownloadStatus
 
 data AppConfig = AppConfig
   { s3Bucket :: Text,
@@ -30,7 +48,6 @@ instance FromJSON AppConfig
 
 instance ToJSON AppConfig
 
--- Data types
 data ApiResponse
   = Success {status_code :: Int}
   | Error {error_message :: String}
