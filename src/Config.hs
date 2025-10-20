@@ -34,7 +34,7 @@ loadConfigFromFile path = do
           putStrLn $ "Config file parse error: " ++ err
           return Nothing
         Right config -> do
-          putStrLn $ "✓ Loaded config from " ++ path
+          putStrLn $ "Loaded config from " ++ path
           return (Just config)
     else return Nothing
 
@@ -51,7 +51,7 @@ loadConfigFromEnv = do
   regionEnv <- lookupEnv "AWS_REGION"
   case (s3BucketEnv, s3PrefixEnv, yahooBaseUrlEnv, yahooLookupUrlEnv) of
     (Just bucketEnv, Just prefixEnv, Just baseUrlEnv, Just lookupUrlEnv) -> do
-      putStrLn "✓ Loaded config from environment variables"
+      putStrLn "Loaded config from environment variables"
       return $
         Just
           AppConfig
