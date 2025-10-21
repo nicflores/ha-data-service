@@ -7,19 +7,24 @@ import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.Text as T
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
-import System.Exit (die)
+import System.Exit (die, exitFailure)
+import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import Types (AppConfig (..))
 
 -- Load configuration: try file first, then env vars, or error out
 loadConfig :: IO AppConfig
 loadConfig = do
   putStrLn "Loading configuration..."
+  hFlush stdout
 
   fileConfig <- loadConfigFromFile "config.json"
   envConfig <- loadConfigFromEnv
 
   case fileConfig <|> envConfig of
-    Nothing -> die "ERROR: No configuration found. Please provide config.json or set environment variables."
+    Nothing -> do
+      hPutStrLn stderr "ERROR: No configuration found. Please provide config.json or set environment variables."
+      hFlush stderr
+      exitFailure
     Just config -> do
       return config
 
@@ -32,9 +37,11 @@ loadConfigFromFile path = do
       case result of
         Left err -> do
           putStrLn $ "Config file parse error: " ++ err
+          hFlush stderr
           return Nothing
         Right config -> do
           putStrLn $ "Loaded config from " ++ path
+          hFlush stdout
           return (Just config)
     else return Nothing
 
@@ -52,6 +59,7 @@ loadConfigFromEnv = do
   case (s3BucketEnv, s3PrefixEnv, yahooBaseUrlEnv, yahooLookupUrlEnv) of
     (Just bucketEnv, Just prefixEnv, Just baseUrlEnv, Just lookupUrlEnv) -> do
       putStrLn "Loaded config from environment variables"
+      hFlush stdout
       return $
         Just
           AppConfig
