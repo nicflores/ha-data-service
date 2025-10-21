@@ -44,6 +44,13 @@ Boulder Haskell MeetUp
 
 ---
 
+# About Me
+
+- Nic Flores
+- works for Northern Trust
+- write mostly Rust
+- Haskell curious
+
 # In Today's Talk
 
 &nbsp;
@@ -70,11 +77,7 @@ Boulder Haskell MeetUp
 
 . . .
 
-→ Testing techniques.
-
-. . .
-
-→ Deploy our application to AWS ECS.
+→ Demo API running in AWS.
 
 ---
 
@@ -82,15 +85,15 @@ Boulder Haskell MeetUp
 
 . . .
 
-`Yesod` - https://www.yesodweb.com/ - comprehnsive
+`Yesod` - https://www.yesodweb.com/ - comprehensive
 
 . . .
 
-`Servant` - https://www.servant.dev/ - super type safe
+`Servant` - https://www.servant.dev/ - expects a description of a web api as a Haskell type
 
 . . .
 
-`Scotty` - https://github.com/scotty-web/scotty - minimalist
+`Scotty` - https://github.com/scotty-web/scotty - lightweight
 
 . . .
 
@@ -479,7 +482,7 @@ downloadTickerData config = post "/download/:ticker" $ do
 ```
 
 ```haskell
-result <- liftIO $ copyDatatoS3 ticker config
+result <- liftIO $ copyDataToS3 ticker config
 ```
 
 ---
@@ -523,7 +526,7 @@ downloadTickerData config = post "/download/:ticker" $ do
 
 - https://github.com/snoyberg/http-client/blob/master/TUTORIAL.md
 - add on package to `http-client`
-- higher level interface
+- with a higher level interface
 
 . . .
 
@@ -531,7 +534,7 @@ downloadTickerData config = post "/download/:ticker" $ do
 
 - http://www.serpentine.com/wreq/
 - full-featured
-- last release was in 2017
+- but last released in 2017
 
 &nbsp;
 
@@ -585,6 +588,14 @@ Requesting data by ticker
 - includePrePost=true
 - events=div%2Csplit
 
+. . .
+
+```console
+curl -A "Mozilla/5.0" --compressed \
+  "https://query2.finance.yahoo.com/v8/finance/chart/AAPL \
+  ?range=1d&interval=1m&includePrePost=true&events=div%2Csplit"
+```
+
 ---
 
 # Yahoo Finance Request
@@ -592,7 +603,11 @@ Requesting data by ticker
 . . .
 
 ```haskell
-import Network.HTTP.Simple (httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
+import Network.HTTP.Simple (
+  httpLbs,
+  parseRequest,
+  setRequestHeaders,
+  setRequestQueryString)
 
 buildYahooRequest :: FetchConfig -> Ticker -> IO Request
 buildYahooRequest config ticker = do
@@ -891,7 +906,8 @@ copyDataToS3 deps ticker config = do
               { bucket = s3Bucket config,
                 prefix = s3Prefix config
               }
-      -- the storage path
+      -- the storage path looks like:
+      -- /financial-data/2025/10/19/AAPL_063259.json
       let objectKey = generateS3Key s3Config ticker currentTime
       -- bucket name object
       let bucketName = BucketName (bucket s3Config)
@@ -941,7 +957,7 @@ then use the alternative operator `<|>` between them
 
 ---
 
-# Testing
+# Source Code Structure
 
 ```console
 ├── app
@@ -958,50 +974,20 @@ then use the alternative operator `<|>` between them
     ├── ConfigSpec.hs
     ├── DataServiceSpec.hs
     ├── HandlersSpec.hs
-    ├── Spec.hs             <------ Like a main() for tests
+    ├── Spec.hs
     ├── TickerLookupSpec.hs
     └── TypesSpec.hs
 ```
 
 ---
 
-# Testing
-
-Notice that:
-
-```haskell
-copyDataToS3 :: Dependencies
-  -> Ticker
-  -> AppConfig
-  -> IO (Either CopyToS3Error PutObjectResponse)
-```
-
-. . .
-
-Notice that we passed in a `Dependencies` object.
-Along with using various pure functions.
-
-. . .
-
-This allows independenly testing the various functions used `copyDataToS3`.
-
-. . .
-
-I used `hspec` to help structure my tests.
-
-. . .
-
-```haskell
-
-```
-
----
-
-# AWS Deployment
-
----
-
 # Quick Demo
+
+The service is deployed on AWS.
+
+. . .
+
+Let's exercise the endpoints we have created.
 
 ---
 
@@ -1035,14 +1021,10 @@ Things to add
 - improve logging
 - instead of making a request to download data do it on a scheduler (ie. write a scheduler)
 - security
-
-. . .
-
-What else could we present?
-
 - do an analysis on download data
 - turn this into a distributed system event driven system with a leader and workers
 - download news given a ticker and do sentiment analysis on new snippets
+- deploying a haskell application to AWS ECS/Kubernetes etc.
 
 ---
 

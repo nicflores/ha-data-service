@@ -3,3 +3,5 @@ dist-newstyle/**
 .terraform/
 .terraform.lock.hcl
 config.json
+*.tfstate
+*.tfstate.backup

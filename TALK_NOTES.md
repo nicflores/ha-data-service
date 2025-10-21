@@ -31,6 +31,7 @@ I wanted to learn as much as I could about writing my own web servers. Luckily t
 What I hope to build, over a series of talks, is a server that periodically downloads Yahoo finance data to an S3 bucket.
 Depending on how things go, we could eventually
 
+0. add a slide info about myself
 1. a web api backend to download Yahoo finance data to an S3 bucket
 2. Get Programming with Haskell by `Will Kurt`. Will Kurt mentions web
    development towards the end the book (around page 500ish). This talk takes some of the
@@ -286,6 +287,8 @@ checkAwsAuth = do
     Right authInfo -> return $ Right authInfo
 ```
 
+TODO: look up what runResourceT does
+
 Here we call the `newEnv discover` which will try different ways to attempt to log into AWS.
 Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify the identity of account we are logged in as.
 
@@ -357,9 +360,6 @@ This represents the meat of what we set out to do. But there's more to do to mak
 ### Error Handling
 
 ### Exercise Deployed Service
-
-curl localhost:8080/download/AAPL
-list files
 
 ### Additional Work
 

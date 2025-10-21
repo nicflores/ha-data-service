@@ -63,7 +63,6 @@ resource "aws_ecr_repository_policy" "app" {
   })
 }
 
-
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
   name = "${local.app_name}-cluster"
@@ -80,7 +79,6 @@ resource "aws_ecs_cluster" "main" {
   tags = local.tags
 }
 
-
 # CloudWatch Log Group for ECS Cluster
 resource "aws_cloudwatch_log_group" "ecs_cluster" {
   name              = "/ecs/cluster/${local.app_name}"
@@ -91,7 +89,7 @@ resource "aws_cloudwatch_log_group" "ecs_cluster" {
 
 # CloudWatch Log Group for Application
 resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${local.app_name}"
+  name              = "/ecs/app/${local.app_name}"
   retention_in_days = 7
 
   tags = local.tags
@@ -140,6 +138,30 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   tags = local.tags
 }
 
+resource "aws_iam_role_policy" "ecs_task_s3_policy" {
+  name = "${local.app_name}-s3-access"
+  role = aws_iam_role.ecs_task_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::${local.s3_bucket}",
+          "arn:aws:s3:::${local.s3_bucket}/*"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -178,7 +200,7 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name  = local.app_name
-      image = "${aws_ecr_repository.app.repository_url}:latest"
+      image = "${aws_ecr_repository.app.repository_url}:cac721d"
 
       portMappings = [
         {
@@ -211,12 +233,36 @@ resource "aws_ecs_task_definition" "app" {
 
       environment = [
         {
-          name  = "PORT"
+          name  = "S3_BUCKET"
+          value = tostring(local.s3_bucket)
+        },
+        {
+          name  = "S3_PREFIX"
+          value = tostring(local.s3_prefix)
+        },
+        {
+          name  = "YAHOO_FINANCE_BASE_URL"
+          value = tostring(local.yahoo_finance_base_url)
+        },
+        {
+          name  = "YAHOO_FINANCE_LOOKUP_URL"
+          value = tostring(local.yahoo_finance_lookup_url)
+        },
+        {
+          name  = "DATA_RANGE"
+          value = "1d"
+        },
+        {
+          name  = "DATA_INTERVAL"
+          value = "1m"
+        },
+        {
+          name  = "SERVER_PORT"
           value = tostring(local.container_port)
         },
         {
-          name  = "ENVIRONMENT"
-          value = local.environment
+          name  = "AWS_REGION"
+          value = tostring(local.region)
         }
       ]
     }
