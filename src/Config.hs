@@ -7,7 +7,7 @@ import Data.Aeson (eitherDecodeFileStrict)
 import qualified Data.Text as T
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
-import System.Exit (die, exitFailure)
+import System.Exit (exitFailure)
 import System.IO (hFlush, hPutStrLn, stderr, stdout)
 import Types (AppConfig (..))
 
