@@ -45,3 +45,23 @@ To start the presentation using `Patat` run the following commands in your termi
 > cabal install --lib patat
 > cabal run patat -- ./presentation/boulder-haskell-meetup-2025.md
 ```
+
+### Terraforming AWS resources
+
+```console
+> cd infrastructre
+> terraform init
+> terraform plan
+> terraform apply
+```
+
+To clean up run:
+
+```console
+# to clean up any ECR images
+> aws ecr batch-delete-image \
+    --repository-name <repo-name> \
+    --image-ids "$(aws ecr list-images --repository-name <repo-name> --query 'imageIds[*]' --output json)" \
+    --region "us-east-1"
+> terraform destroy
+```

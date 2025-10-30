@@ -36,7 +36,7 @@ jobs:
       uses: docker/build-push-action@v6
       with:
         context: .
-        push: true
+        push: false # need to redeploy aws resources in order to push to ecr
         tags: |
           ${{ steps.login-ecr.outputs.registry }}/dev-us-east-1-hs-data-service:latest
           ${{ steps.login-ecr.outputs.registry }}/dev-us-east-1-hs-data-service:${{ env.SHORT_SHA }}

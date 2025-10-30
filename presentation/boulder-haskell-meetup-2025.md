@@ -51,6 +51,8 @@ Boulder Haskell MeetUp
 - write mostly Rust
 - Haskell curious
 
+---
+
 # In Today's Talk
 
 &nbsp;
@@ -612,8 +614,8 @@ import Network.HTTP.Simple (
 buildYahooRequest :: FetchConfig -> Ticker -> IO Request
 buildYahooRequest config ticker = do
   let url = T.unpack $ baseUrl config <> "/" <> ticker
-  let queryParams = [...]
   let headers = [...]
+  let queryParams = [...]
   setRequestHeaders headers . setRequestQueryString queryParams <$> parseRequest url
 ```
 
@@ -630,11 +632,11 @@ import Network.HTTP.Simple (httpLbs, parseRequest, setRequestHeaders, setRequest
 buildYahooRequest :: FetchConfig -> Ticker -> IO Request
 buildYahooRequest config ticker = do
   let url = T.unpack $ baseUrl config <> "/" <> ticker
-  let queryParams = [
+  let headers = [
       ("User-Agent", "Mozilla/5.0")
     , ("Accept-Encoding", "gzip, deflate")
   ]
-  let headers = [
+  let queryParams = [
       ("range", Just "1d")
     , ("interval", Just "1m")
     , ("includePrePost", Just "true")
@@ -651,7 +653,7 @@ buildYahooRequest config ticker = do
 
 `aws` - https://github.com/aristidb/aws
 
-- seems to uspport minimal resources
+- seems to uspport only major AWS resources (DynamoDB, EC2, IAM, S3, SES, SQS)
 
 . . .
 
@@ -665,123 +667,80 @@ buildYahooRequest config ticker = do
 
 &nbsp;
 
-In this talk I chose to use `Amazonka`
+In this talk I chose to use `Aws`
 
-- import individal libraries
-- for example `amazonka-s3` and `amazonka-sts`
-- more straight forward to use
+- works with latest ghc version
+- can look up environment variable credentials
+- actively developed
 
 ---
 
-# Using Amazonka
+# Using Aws
 
 . . .
 
-Let's see how Amazonka works.
+Let's see how Aws works.
 
 . . .
 
 ```haskell
-import Amazonka (discover, newEnv)
+import Network.HTTP.Conduit (Manager, newManager, tlsManagerSettings)
 
-checkAwsAuth :: IO (Either String AuthInfo)
-checkAwsAuth = do
-  result <- try $ do
-    env <- newEnv discover
-    -- ...???... --
+main :: IO ()
+main = do
+  cfg <- Aws.baseConfiguration
+  mgr <- newManager tlsManagerSettings
+  let sampleData = "Hello from Haskell! This is a test upload to S3."
+  let byteString = LBS.pack $ map (fromIntegral . fromEnum) sampleData
+  let putObj = getAwsPutObj "my-bucket" "test_data.txt" byteString
+  sendResp <- sendPutObj cfg mgr putObj
+```
+
+Note we need 4 things:
+
+- a `Configuration` which finds AWS credentials
+- an http client `Manager`
+- then a `getAwsPutObj` function
+- and a `sendPutObj` function
+
+---
+
+# Building a Put Object
+
+. . .
+
+```haskell
+getAwsPutObj :: BucketName -> ObjectKey -> LazyByteString -> PutObject
+```
+
+---
+
+# Building a Put Object
+
+```haskell
+getAwsPutObj :: BucketName -> ObjectKey -> LazyByteString -> PutObject
+getAwsPutObj bucketName (ObjectKey objectKey) lbs = S3.putObject bucketName objectKey $ RequestBodyLBS lbs
+```
+
+---
+
+# Building Send Put Object
+
+```haskell
+sendPutObj :: Aws.Configuration -> Manager -> PutObject -> IO (Either CopyToS3Error S3.PutObjectResponse)
+```
+
+---
+
+# Building Send Put Object
+
+```haskell
+sendPutObj :: Aws.Configuration -> Manager -> PutObject -> IO (Either CopyToS3Error S3.PutObjectResponse)
+sendPutObj cfg mgr putObj = do
+  result <- try $ runResourceT $ Aws.pureAws cfg Aws.defServiceConfig mgr putObj
   case result of
-    Left (ex :: SomeException) -> return $ Left (show ex)
-    Right authInfo -> return $ Right authInfo
-```
-
-. . .
-
-`discover` finds credentials
-
-- environment variables
-- config files
-- web identity
-- ecs container agent
-
----
-
-# Using Amazonka
-
-Let's see how Amazonka works.
-
-```haskell
-import Amazonka (discover, newEnv, runResourceT, send)
-import Amazonka.STS (newGetCallerIdentity)
-
-checkAwsAuth :: IO (Either String AuthInfo)
-checkAwsAuth = do
-  result <- try $ do
-    env <- newEnv discover
-    runResourceT $ do
-      response <- send env newGetCallerIdentity
-      -- ...???... --
-  case result of
-    Left (ex :: SomeException) -> return $ Left (show ex)
-    Right authInfo -> return $ Right authInfo
-```
-
-. . .
-
-Here we send `newGetCallerIdentity`.
-
-. . .
-
-In order to write a file we need to send a `PutObject`.
-
----
-
-# Writing to S3
-
-. . .
-
-```haskell
-uploadToS3 :: Env
-  -> BucketName
-  -> ObjectKey
-  -> LazyByteString
-  -> IO (Either CopyToS3Error PutObjectResponse)
-uploadToS3 env bucketName objectKey body = do
-  let putReq = newPutObject bucketName objectKey (toBody body)
-  --- ??? ---
-```
-
----
-
-# Writing to S3
-
-```haskell
-uploadToS3 :: Env
-  -> BucketName
-  -> ObjectKey
-  -> LazyByteString
-  -> IO (Either CopyToS3Error PutObjectResponse)
-uploadToS3 env bucketName objectKey body = do
-  let putReq = newPutObject bucketName objectKey (toBody body)
-  uploadResult <- try $ runResourceT $ send env putReq
-  --- ??? --
-```
-
----
-
-# Writing to S3
-
-```haskell
-uploadToS3 :: Env
-  -> BucketName
-  -> ObjectKey
-  -> LazyByteString
-  -> IO (Either CopyToS3Error PutObjectResponse)
-uploadToS3 env bucketName objectKey body = do
-  let putReq = newPutObject bucketName objectKey (toBody body)
-  uploadResult <- try $ runResourceT $ send env putReq
-  case uploadResult of
-    Left s3Ex -> return $ Left (S3UploadError s3Ex)
-    Right putRes -> return $ Right putRes
+    Left err -> return $ Left (S3UploadError err)
+    Right resp -> return $ Right resp
 ```
 
 ---
@@ -800,11 +759,11 @@ We've written:
 # Building Copy Data to S3
 
 ```haskell
-copyUrltoS3 :: Dependencies
+copyDataToS3 :: Dependencies
   -> Ticker
   -> AppConfig
   -> IO (Either CopyToS3Error PutObjectResponse)
-copyUrltoS3 deps ticker config = do
+copyDataToS3 deps ticker config = do
   -- extract details from the config
   let fetchConfig =
         FetchConfig
@@ -819,11 +778,11 @@ copyUrltoS3 deps ticker config = do
 # Building Copy Data to S3
 
 ```haskell
-copyUrltoS3 :: Dependencies
+copyDataToS3 :: Dependencies
   -> Ticker
   -> AppConfig
   -> IO (Either CopyToS3Error PutObjectResponse)
-copyUrltoS3 deps ticker config = do
+copyDataToS3 deps ticker config = do
   -- extract details from the config
   let fetchConfig =
         FetchConfig
@@ -842,11 +801,11 @@ copyUrltoS3 deps ticker config = do
 # Building Copy Data to S3
 
 ```haskell
-copyUrltoS3 :: Dependencies
+copyDataToS3 :: Dependencies
   -> Ticker
   -> AppConfig
   -> IO (Either CopyToS3Error PutObjectResponse)
-copyUrltoS3 deps ticker config = do
+copyDataToS3 deps ticker config = do
   -- extract details from the config
   let fetchConfig =
         FetchConfig
@@ -861,8 +820,10 @@ copyUrltoS3 deps ticker config = do
   case fetchResult of
     Left err -> return $ Left err
     Right body -> do
-      -- get the amazonka env from dependencies
-      env <- depNewEnv deps
+      -- get the aws configuration
+      cfg <- depNewCfg deps
+      -- http client manager
+      mgr <- depNewMgr deps
       -- needed for storage path
       currentTime <- depGetCurrentTime deps
       -- bucket info
@@ -910,9 +871,11 @@ copyDataToS3 deps ticker config = do
       -- /financial-data/2025/10/19/AAPL_063259.json
       let objectKey = generateS3Key s3Config ticker currentTime
       -- bucket name object
-      let bucketName = BucketName (bucket s3Config)
+      let bucketName = bucket s3Config
+      -- generate put object
+      let putObj = depGetAwsPutObj deps bucketName objectKey body
       -- seen before
-      depUploadToS3 deps env bucketName objectKey body
+      depUploadToS3 deps cfg mgr putObj
 ```
 
 ---
@@ -1020,8 +983,8 @@ Things to add
 - improve tests
 - improve logging
 - instead of making a request to download data do it on a scheduler (ie. write a scheduler)
-- security
-- do an analysis on download data
+- add some security (rate limit)
+- do an analysis on downloaded data
 - turn this into a distributed system event driven system with a leader and workers
 - download news given a ticker and do sentiment analysis on new snippets
 - deploying a haskell application to AWS ECS/Kubernetes etc.
@@ -1033,3 +996,10 @@ Things to add
 **Questions?**
 
 Github: https://github.com/nicflores/ha-data-service
+
+&nbsp;
+
+References:
+
+1. Get Programming with Haskell by Will Kurt
+2. https://gilmi.me/blog/post/2020/12/05/scotty-bulletin-board
