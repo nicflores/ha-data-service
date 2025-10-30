@@ -1,4 +1,4 @@
-FROM haskell:9.6.7 as builder
+FROM haskell:9.12.2 as builder
 COPY . .
 RUN ls -al
 RUN cabal update
