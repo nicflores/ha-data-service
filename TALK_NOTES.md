@@ -264,84 +264,79 @@ Amazonka provides a `send` function that takes the credentials and the request t
 
 ## Haskell AWS SDK
 
-Since we'll be writing a file to S3 we need a Haskell AWS library. Again, a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `amazonka` event though its a bit older I like how they've isolated the interaction with various AWS resources by publishing libraries like `amazonka-s3`, `amazonka-ec2`, `amazonka-sns` etc.
+Since we'll be writing a file to S3 we need a Haskell AWS library. Again, a quick search reveals there are several: `aws`, `amazonka`, and `aws-sdk`. In this talk we'll be using `aws`.
 
-Here we'll be using `amazonka`, `amazonka-s3`, and `amazonka-sts` (security token service)
-A simple example of using `amazonka` is as follows:
+To demonstrate how we write data to S3 we do the following.
 
 ```haskell
-checkAwsAuth :: IO (Either String AuthInfo)
-checkAwsAuth = do
-  result <- try $ do
-    env <- newEnv discover
-    runResourceT $ do
-      response <- send env newGetCallerIdentity
-      return $
-        AuthInfo
-          { account = response ^. getCallerIdentityResponse_account,
-            arn = response ^. getCallerIdentityResponse_arn,
-            userId = response ^. getCallerIdentityResponse_userId
-          }
-  case result of
-    Left (ex :: SomeException) -> return $ Left (show ex)
-    Right authInfo -> return $ Right authInfo
+main :: IO ()
+main = do
+  cfg <- Aws.baseConfiguration
+  mgr <- newManager tlsManagerSettings
+  let sampleData = "Hello from Haskell! This is a test upload to S3."
+  let byteString = LBS.pack $ map (fromIntegral . fromEnum) sampleData
+  let putObj = getAwsPutObj "my-bucket" "test_data.txt" byteString
+  sendResp <- sendPutObj cfg mgr putObj
 ```
 
-TODO: look up what runResourceT does
+Notice that we mainly need 4 things. The `Configuration`, an http client `Manager`.
+Then we need to build a put object as well as sending the put object.
 
-Here we call the `newEnv discover` which will try different ways to attempt to log into AWS.
-Once we have our `env` we can use it to send requests to AWS. In this case we as for the Callers Identity to verify the identity of account we are logged in as.
-
-We'll use this to write files to S3.
+This is the general idea of writing to S3.
 
 ### Writng the body to S3
 
-We'll use the `send` and make sure we formulate a request to S3 by building a `PutObject` using `newPutObject`
-and passing in:
+We'll use `Aws.pureAws` to send our data to S3 by passing in:
 
-1. BucketName
-2. ObjectKey
-3. ByteString
+1. Configuration
+2. Manager
+3. PutObject
+4. Aws.defServiceConfig
 
 ```haskell
-newPutObject BucketName ObjectKey ByteString
+Aws.pureAws cfg Aws.defServiceConfig mgr putObj
 ```
 
-Building the three types above will look something like this:
+Building the types above will look something like this:
 
 ```haskell
-copyUrltoS3 :: IO (Either String ())
-copyUrltoS3 = do
-  env <- newEnv discover
-  result <- try $ do
-    let baseUrl = "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
-    let queryParams = [("range", Just "1d"), ("interval", Just "1m"), ("includePrePost", Just "true"), ("events", Just "div,split")]
-    let headersParams = [("User-Agent", "Mozilla/5.0"), ("Accept-Encoding", "gzip, deflate")]
-    request <- parseRequest baseUrl
-    let requestWithOptions = setRequestHeaders headersParams $ setRequestQueryString queryParams request
-    response <- httpLbs requestWithOptions
-    if getResponseStatusCode response == 200
-      then do
-        -- write response body to S3
-        currentTime <- getCurrentTime
-        let datePath = formatTime defaultTimeLocale "%Y/%m/%d" currentTime
-        let timeStamp = formatTime defaultTimeLocale "%H%M%S" currentTime
-
-        let blobName = BucketName $ s3Bucket config
-        let objectKey = ObjectKey $ T.pack $ T.unpack pathPrefix ++ datePath ++ "/data_" ++ timeStamp ++ ".json"
-        let bodySource = toBody $ getResponseBody response
-
-        let putReq = newPutObject blobName objectKey bodySource
-
-        runResourceT $ do
-          _resp <- send env putReq
-          return ()
-
-      else error $ "HTTP error: " ++ show (getResponseStatusCode response)
-
-  case result of
-    Left (ex :: HttpException) -> return $ Left (show ex)
-    Right _ -> return $ Right ()
+copyDataToS3 :: Dependencies
+  -> Ticker
+  -> AppConfig
+  -> IO (Either CopyToS3Error PutObjectResponse)
+copyDataToS3 deps ticker config = do
+  -- extract details from the config
+  let fetchConfig =
+        FetchConfig
+          { baseUrl = yahooFinanceBaseUrl config,
+            range = dataRange config,
+            interval = dataInterval config
+          }
+  -- seen perviously
+  request <- buildYahooRequest fetchConfig ticker
+  -- helper to extract body from request
+  fetchResult <- depFetchData deps request
+  case fetchResult of
+    Left err -> return $ Left err
+    Right body -> do
+      -- get the amazonka env from dependencies
+      env <- depNewEnv deps
+      -- needed for storage path
+      currentTime <- depGetCurrentTime deps
+      let s3Config =
+            S3Config
+              { bucket = s3Bucket config,
+                prefix = s3Prefix config
+              }
+      -- the storage path looks like:
+      -- /financial-data/2025/10/19/AAPL_063259.json
+      let objectKey = generateS3Key s3Config ticker currentTime
+      -- bucket name object
+      let bucketName = bucket s3Config
+      -- generate put object
+      let putObj = depGetAwsPutObj deps bucketName objectKey body
+      -- seen before
+      depUploadToS3 deps cfg mgr putObj
 ```
 
 This represents the meat of what we set out to do. But there's more to do to make our application worthy of "web service". What's missing?
@@ -366,3 +361,7 @@ This represents the meat of what we set out to do. But there's more to do to mak
 1. write some Haskell to do some kind of simple analysis on the financial data downloaded to an S3 bucket
 2. write a samll distributed system and have the leader service communicate with the a worker service over grpc or a message bus, with the leader service to receive messages
 3. or we can do some sentiment on company news snippets
+
+### Notes
+
+VS Code Hlint plugin

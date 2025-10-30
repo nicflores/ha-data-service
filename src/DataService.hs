@@ -2,17 +2,21 @@
 
 module DataService where
 
-import Amazonka (Env, discover, newEnv, runResourceT, send, toBody)
-import qualified Amazonka.Data as LazyByteString
-import Amazonka.S3 (BucketName (BucketName), ObjectKey (ObjectKey), PutObjectResponse, newPutObject)
+import qualified Aws
+import Aws.S3 (PutObject)
+import qualified Aws.S3 as S3
 import Control.Exception (try)
-import Data.ByteString.Char8 as BS
+import Control.Monad.Trans.Resource (runResourceT)
+import Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Text as T (pack, unpack)
 import Data.Time (defaultTimeLocale, formatTime, getCurrentTime)
+import qualified Data.Time as LazyByteString
+import Network.HTTP.Client.Conduit (Manager, RequestBody (RequestBodyLBS))
+import Network.HTTP.Conduit (newManager, tlsManagerSettings)
 import Network.HTTP.Simple (Request, getResponseBody, getResponseStatusCode, httpLbs, parseRequest, setRequestHeaders, setRequestQueryString)
 import TickerLookup (tickerLookup)
-import Types (AppConfig (dataInterval, dataRange, s3Bucket, s3Prefix, yahooFinanceBaseUrl), CopyToS3Error (ApiError, NetworkError, S3UploadError, TickerError, TickerNotFound), Dependencies (Dependencies, depFetchData, depGetCurrentTime, depNewEnv, depUploadToS3), FetchConfig (FetchConfig, baseUrl, interval, range), S3Config (S3Config, bucket, prefix), Ticker)
+import Types (AppConfig (dataInterval, dataRange, s3Bucket, s3Prefix, yahooFinanceBaseUrl), BucketName, CopyToS3Error (ApiError, NetworkError, S3UploadError, TickerError, TickerNotFound), Dependencies (Dependencies, depFetchData, depGetAwsPutObj, depGetCurrentTime, depNewCfg, depNewMgr, depSendPutObj), FetchConfig (FetchConfig, baseUrl, interval, range), ObjectKey (ObjectKey), S3Config (S3Config, bucket, prefix), Ticker)
 
 buildYahooRequest :: FetchConfig -> Ticker -> IO Request
 buildYahooRequest config ticker = do
@@ -56,24 +60,28 @@ generateS3Key config ticker currentTime =
           <> ".json"
    in ObjectKey keyText
 
-uploadToS3 :: Env -> BucketName -> ObjectKey -> LazyByteString -> IO (Either CopyToS3Error PutObjectResponse)
-uploadToS3 env bucketName objectKey body = do
-  let putReq = newPutObject bucketName objectKey (toBody body)
-  uploadResult <- try $ runResourceT $ send env putReq
-  case uploadResult of
-    Left s3Ex -> return $ Left (S3UploadError s3Ex)
-    Right putRes -> return $ Right putRes
+getAwsPutObj :: BucketName -> ObjectKey -> LazyByteString -> PutObject
+getAwsPutObj bucketName (ObjectKey objectKey) lbs = S3.putObject bucketName objectKey $ RequestBodyLBS lbs
+
+sendPutObj :: Aws.Configuration -> Manager -> PutObject -> IO (Either CopyToS3Error S3.PutObjectResponse)
+sendPutObj cfg mgr putObj = do
+  result <- try $ runResourceT $ Aws.pureAws cfg Aws.defServiceConfig mgr putObj
+  case result of
+    Left err -> return $ Left (S3UploadError err)
+    Right resp -> return $ Right resp
 
 productionDeps :: Dependencies
 productionDeps =
   Dependencies
     { depFetchData = fetchYahooData,
-      depUploadToS3 = uploadToS3,
+      depGetAwsPutObj = getAwsPutObj,
+      depSendPutObj = sendPutObj,
       depGetCurrentTime = getCurrentTime,
-      depNewEnv = newEnv discover
+      depNewMgr = newManager tlsManagerSettings,
+      depNewCfg = Aws.baseConfiguration
     }
 
-copyUrltoS3 :: Dependencies -> Ticker -> AppConfig -> IO (Either CopyToS3Error PutObjectResponse)
+copyUrltoS3 :: Dependencies -> Ticker -> AppConfig -> IO (Either CopyToS3Error S3.PutObjectResponse)
 copyUrltoS3 deps ticker config = do
   tickerCheck <- tickerLookup ticker config
   case tickerCheck of
@@ -91,7 +99,8 @@ copyUrltoS3 deps ticker config = do
       case fetchResult of
         Left err -> return $ Left err
         Right body -> do
-          env <- depNewEnv deps
+          cfg <- depNewCfg deps
+          mgr <- depNewMgr deps
           currentTime <- depGetCurrentTime deps
           let s3Config =
                 S3Config
@@ -99,5 +108,6 @@ copyUrltoS3 deps ticker config = do
                     prefix = s3Prefix config
                   }
           let objectKey = generateS3Key s3Config ticker currentTime
-          let bucketName = BucketName (bucket s3Config)
-          depUploadToS3 deps env bucketName objectKey body
+          let bucketName = bucket s3Config
+          let putObj = depGetAwsPutObj deps bucketName objectKey body
+          depSendPutObj deps cfg mgr putObj
