@@ -1,4 +1,4 @@
-cabal-version:      3.8
+cabal-version:      3.14
 name:               hs-data-service
 version:            0.1.0.0
 license:            NONE
@@ -18,12 +18,10 @@ library
                     , TickerLookup
                     , DataService
                     , Handlers
-    build-depends:    base ^>=4.18.3.0
+    build-depends:    base ^>=4.21.0.0
                     , scotty
                     , text
-                    , amazonka
-                    , amazonka-s3
-                    , amazonka-sts
+                    , aws
                     , lens
                     , http-conduit
                     , http-types
@@ -31,12 +29,13 @@ library
                     , time
                     , aeson
                     , directory
+                    , resourcet
     default-language: Haskell2010
 
 executable hs-data-service
     import:           warnings
     main-is:          Main.hs
-    build-depends:    base ^>=4.18.3.0
+    build-depends:    base ^>=4.21.0.0
                     , hs-data-service
                     , scotty
     hs-source-dirs:   app
@@ -51,7 +50,7 @@ test-suite hs-data-service-test
                     , TickerLookupSpec
                     , DataServiceSpec
                     , HandlersSpec
-    build-depends:    base ^>=4.18.3.0
+    build-depends:    base ^>=4.21.0.0
                     , hs-data-service
                     , hspec
                     , hspec-wai

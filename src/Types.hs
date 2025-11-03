@@ -1,18 +1,25 @@
 {-# LANGUAGE DeriveGeneric #-}
 
-module Types (Ticker, AppConfig (..), CopyToS3Error (..), Dependencies (..), S3Config (..), FetchConfig (..), TickerLookupError (..), errorToResponse, Health (..), DownloadStatus (..)) where
+module Types (Ticker, AppConfig (..), CopyToS3Error (..), Dependencies (..), S3Config (..), FetchConfig (..), TickerLookupError (..), errorToResponse, Health (..), DownloadStatus (..), ObjectKey (..), BucketName) where
 
-import Amazonka (Env)
-import qualified Amazonka as Data.ByteString.Lazy.LazyByteString
-import Amazonka.S3 (BucketName, ObjectKey, PutObjectResponse)
+import qualified Aws
+import Aws.S3 (PutObject)
+import qualified Aws.S3 as S3
 import Data.Aeson (FromJSON, ToJSON)
 import Data.ByteString.Lazy (LazyByteString)
 import Data.Text as T (Text, unpack)
+import qualified Data.Time as Data.ByteString.Lazy.LazyByteString
 import GHC.Generics (Generic)
+import Network.HTTP.Conduit (Manager)
 import Network.HTTP.Simple (HttpException, JSONException, Request)
 import Network.HTTP.Types.Status (Status, status404, status500, status502)
 
 type Ticker = Text
+
+type BucketName = Text
+
+newtype ObjectKey = ObjectKey Text
+  deriving (Show, Eq)
 
 newtype Health = Health
   {health_status :: Text}
@@ -84,9 +91,11 @@ data S3Config = S3Config
 
 data Dependencies = Dependencies
   { depFetchData :: Request -> IO (Either CopyToS3Error Data.ByteString.Lazy.LazyByteString),
-    depUploadToS3 :: Env -> BucketName -> ObjectKey -> Data.ByteString.Lazy.LazyByteString -> IO (Either CopyToS3Error PutObjectResponse),
+    depGetAwsPutObj :: BucketName -> ObjectKey -> LazyByteString -> PutObject,
+    depSendPutObj :: Aws.Configuration -> Manager -> PutObject -> IO (Either CopyToS3Error S3.PutObjectResponse),
     depGetCurrentTime :: IO Data.ByteString.Lazy.LazyByteString.UTCTime,
-    depNewEnv :: IO Env
+    depNewMgr :: IO Manager,
+    depNewCfg :: IO Aws.Configuration
   }
 
 -- Convert errors to HTTP responses
